@@ -23,12 +23,23 @@ pub fn termFiberEngine() void {
 }
 
 pub fn spawnTask(T: type, callback: *const fn (*T) void, data: *T, dataDeinit: ?*const fn (*T) void) void {
-    // TODO: peak fiber from a free list
-    const fiber = fibers.createFromCallback(.{
+    const cb: fibers.Callback = .{
         .callback = @ptrCast(callback),
         .data = data,
         .dataDeinit = @ptrCast(dataDeinit),
-    });
+    };
 
-    kernel.schedule(fiber);
+    kernel.shared.lock();
+    defer kernel.shared.unlock();
+
+    if (kernel.shared.freeList.pop()) |fiber| {
+        const tp: fibers.FiberType = fiber.*;
+        std.debug.assert(tp == .callback);
+        fiber.callback.cb = cb;
+        kernel.scheduleNoLock(fiber);
+        return;
+    }
+
+    const fiber = fibers.createFromCallback(cb);
+    kernel.scheduleNoLock(fiber);
 }

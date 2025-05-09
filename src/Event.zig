@@ -45,7 +45,7 @@ pub fn wait(self: *Self) void {
     self.pending = &node;
 
     // stop execution until `set` method awake us
-    kernel.switchToNext();
+    kernel.switchToNextNoLock();
 
     std.debug.assert(self.activated);
 }

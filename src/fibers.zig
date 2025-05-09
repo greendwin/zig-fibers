@@ -70,7 +70,7 @@ pub fn createFromCallback(callback: Callback) *Fiber {
     const fib = createFiberUninit();
     const handle = threading.CreateFiber(
         DEFAULT_STACK_SIZE,
-        entrypoint,
+        callbackEntrypoint,
         fib,
     ) orelse @panic("failed to create fiber");
 
@@ -111,7 +111,7 @@ fn createFiberUninit() *Fiber {
     return fib;
 }
 
-fn entrypoint(threadParam: ?*anyopaque) callconv(.winapi) void {
+fn callbackEntrypoint(threadParam: ?*anyopaque) callconv(.winapi) void {
     const self: *Fiber = @ptrCast(@alignCast(threadParam.?));
 
     // note: we entered here on *LOCKED* `shared` mutex

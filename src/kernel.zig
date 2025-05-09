@@ -8,13 +8,6 @@ const SharedData = @import("SharedData.zig");
 
 pub var shared: SharedData = undefined;
 
-pub fn schedule(fiber: *Fiber) void {
-    shared.lock();
-    defer shared.unlock();
-
-    scheduleNoLock(fiber);
-}
-
 pub inline fn scheduleNoLock(fiber: *Fiber) void {
     shared.queue.append(shared.gpa, fiber) catch @panic("oom");
     shared.cond.broadcast(); // TODO: TBD: is it safe to `signal`? can non-worker thread receive this event?
@@ -88,16 +81,15 @@ pub inline fn getCurrentFiber() *Fiber {
     );
 }
 
-// WARNING: all `switchXXX` functions must be called with `shared.lock` activated!
-pub fn switchToNext() void {
+pub fn switchToNextNoLock() void {
     if (shared.queue.popFront()) |fiber| {
-        switchToFiber(fiber);
+        switchToFiberNoLock(fiber);
     } else {
-        switchToFiber(rootFiber.?);
+        switchToFiberNoLock(rootFiber.?);
     }
 }
 
-fn switchToFiber(fiber: *Fiber) void {
+fn switchToFiberNoLock(fiber: *Fiber) void {
     std.debug.assert(currentFiber != fiber);
     currentFiber = fiber;
     threading.SwitchToFiber(fiber.handle());
@@ -120,7 +112,7 @@ fn workerThread(param: ?*anyopaque) callconv(.winapi) u32 {
 
     while (!shared.shutdown) {
         if (shared.queue.popFront()) |fiber| {
-            switchToFiber(fiber);
+            switchToFiberNoLock(fiber);
             continue;
         }
 
@@ -138,7 +130,7 @@ fn workerCallback(param: ?*anyopaque) void {
 
     while (!shared.shutdown) {
         if (shared.queue.popFront()) |fiber| {
-            switchToFiber(fiber);
+            switchToFiberNoLock(fiber);
             continue;
         }
 
@@ -149,12 +141,14 @@ fn workerCallback(param: ?*anyopaque) void {
 pub fn storeFinishedFiberAndActivateNext(fiber: *Fiber) void {
     std.debug.assert(currentFiber == fiber);
 
+    const tp: fibers.FiberType = fiber.*;
+    std.debug.assert(tp == .callback);
+
     // note: called on fiber side
     shared.lock();
     defer shared.unlock();
 
     shared.freeList.append(shared.gpa, fiber) catch @panic("oom");
 
-    // note: we are still under `shared.lock`
-    switchToNext();
+    switchToNextNoLock();
 }
