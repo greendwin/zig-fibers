@@ -34,6 +34,13 @@ pub const Fiber = union(FiberType) {
     callback: FiberCallback,
     thread: FiberThread,
 
+    pub fn threadGroup(self: *Fiber) ?usize {
+        switch (self.*) {
+            .callback => return null,
+            .thread => |x| return x.threadGroup,
+        }
+    }
+
     pub fn handle(self: *Fiber) *anyopaque {
         switch (self.*) {
             inline else => |x| return x.handle,
@@ -84,16 +91,18 @@ pub fn createFromCallback(callback: Callback) *Fiber {
 
 const FiberThread = struct {
     handle: *anyopaque,
+    threadGroup: ?usize, // exclusive run group
 
     fn deinit(self: *FiberThread) void {
         _ = self;
     }
 };
 
-pub fn createFromThread(handle: *anyopaque) *Fiber {
+pub fn createFromThread(handle: *anyopaque, threadGroup: ?usize) *Fiber {
     const fib = createFiberUninit();
     fib.* = .{ .thread = .{
         .handle = handle,
+        .threadGroup = threadGroup,
     } };
     return fib;
 }

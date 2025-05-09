@@ -9,8 +9,13 @@ const SharedData = @import("SharedData.zig");
 pub var shared: SharedData = undefined;
 
 pub inline fn scheduleNoLock(fiber: *Fiber) void {
-    shared.queue.append(shared.gpa, fiber) catch @panic("oom");
-    shared.cond.broadcast(); // TODO: TBD: is it safe to `signal`? can non-worker thread receive this event?
+    if (fiber.threadGroup()) |id| {
+        shared.groups[id].append(shared.gpa, fiber) catch @panic("oom");
+    } else {
+        shared.queue.append(shared.gpa, fiber) catch @panic("oom");
+    }
+
+    shared.cond.broadcast();
 }
 
 pub fn spawnThreads(numThreads: usize) void {
@@ -51,15 +56,18 @@ pub fn shutdownThreads() void {
     }
 }
 
-threadlocal var rootFiber: ?*Fiber = null;
+threadlocal var tlsGroupId: ?usize = null;
+threadlocal var tlsRootFiber: ?*Fiber = null;
 
 pub fn initFiberFromThread(worker: bool) void {
     const handle = threading.ConvertThreadToFiber(null) orelse @panic("failed to convert current thread to a fiber");
-    const fromThread = fibers.createFromThread(handle);
+    // bind non-worker thread for it's original thread
+    const threadGroup: ?usize = if (worker) null else 0;
+    const fromThread = fibers.createFromThread(handle, threadGroup);
     currentFiber = fromThread;
 
     if (worker) {
-        rootFiber = fromThread;
+        tlsRootFiber = fromThread;
         return;
     }
 
@@ -69,7 +77,8 @@ pub fn initFiberFromThread(worker: bool) void {
 
     // create special callback fiber with worker loop
     // this allows to original thread to use `Event` (i.e. move its fiber in sleeping state)
-    rootFiber = fibers.createFromCallback(.{ .callback = workerCallback });
+    tlsRootFiber = fibers.createFromCallback(.{ .callback = workerCallback });
+    tlsGroupId = SharedData.ORIGIN_GROUP_ID;
 }
 
 threadlocal var currentFiber: ?*Fiber = null;
@@ -82,11 +91,21 @@ pub inline fn getCurrentFiber() *Fiber {
 }
 
 pub fn switchToNextNoLock() void {
-    if (shared.queue.popFront()) |fiber| {
+    if (peakNextNoLock()) |fiber| {
         switchToFiberNoLock(fiber);
     } else {
-        switchToFiberNoLock(rootFiber.?);
+        switchToFiberNoLock(tlsRootFiber.?);
     }
+}
+
+pub fn peakNextNoLock() ?*Fiber {
+    if (tlsGroupId) |idx| {
+        if (shared.groups[idx].popFront()) |fib| {
+            return fib;
+        }
+    }
+
+    return shared.queue.popFront();
 }
 
 fn switchToFiberNoLock(fiber: *Fiber) void {
@@ -111,7 +130,7 @@ fn workerThread(param: ?*anyopaque) callconv(.winapi) u32 {
     }
 
     while (!shared.shutdown) {
-        if (shared.queue.popFront()) |fiber| {
+        if (peakNextNoLock()) |fiber| {
             switchToFiberNoLock(fiber);
             continue;
         }
@@ -129,13 +148,15 @@ fn workerCallback(param: ?*anyopaque) void {
     defer shared.unlock();
 
     while (!shared.shutdown) {
-        if (shared.queue.popFront()) |fiber| {
+        if (peakNextNoLock()) |fiber| {
             switchToFiberNoLock(fiber);
             continue;
         }
 
         shared.wait();
     }
+
+    @panic("worker callback should never exit");
 }
 
 pub fn storeFinishedFiberAndActivateNext(fiber: *Fiber) void {

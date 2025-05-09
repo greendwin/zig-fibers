@@ -20,9 +20,7 @@ pub fn main() !void {
 
     print("initializing...\n", .{});
 
-    // HACK: use `numThreads==0` since our current thread can be awaken on worker thread
-    // TODO: we need to bind this fiber to this thread
-    lib.initFiberEngine(gpa.allocator(), 0);
+    lib.initFiberEngine(gpa.allocator(), 4);
     defer {
         print("terminating...\n", .{});
         lib.termFiberEngine();
