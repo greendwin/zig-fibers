@@ -2,7 +2,8 @@ const std = @import("std");
 
 const threading = @import("win32").system.threading;
 
-const Fiber = @import("Fiber.zig");
+const fibers = @import("fibers.zig");
+const Fiber = fibers.Fiber;
 const SharedData = @import("SharedData.zig");
 
 pub var shared: SharedData = undefined;
@@ -11,6 +12,10 @@ pub fn schedule(fiber: *Fiber) void {
     shared.lock();
     defer shared.unlock();
 
+    scheduleNoLock(fiber);
+}
+
+pub inline fn scheduleNoLock(fiber: *Fiber) void {
     shared.queue.append(shared.gpa, fiber) catch @panic("oom");
     shared.cond.broadcast(); // TODO: TBD: is it safe to `signal`? can non-worker thread receive this event?
 }
@@ -21,7 +26,7 @@ pub fn spawnThreads(numThreads: usize) void {
     for (0..numThreads) |_| {
         const handle = threading.CreateThread(
             null,
-            Fiber.DEFAULT_STACK_SIZE,
+            fibers.DEFAULT_STACK_SIZE,
             &workerThread,
             null,
             threading.THREAD_CREATION_FLAGS{},
@@ -53,21 +58,55 @@ pub fn shutdownThreads() void {
     }
 }
 
-threadlocal var rootFiber: ?*anyopaque = null;
+threadlocal var rootFiber: ?*Fiber = null;
 
-pub fn initRootFiber() void {
-    rootFiber = threading.ConvertThreadToFiber(null) orelse @panic("failed to convert current thread to a fiber");
+pub fn initFiberFromThread(worker: bool) void {
+    const handle = threading.ConvertThreadToFiber(null) orelse @panic("failed to convert current thread to a fiber");
+    const fromThread = fibers.createFromThread(handle);
+    currentFiber = fromThread;
+
+    if (worker) {
+        rootFiber = fromThread;
+        return;
+    }
+
+    // special case for non-worker root threads
+
+    // TODO: bind `fromThread` to current thread!
+
+    // create special callback fiber with worker loop
+    // this allows to original thread to use `Event` (i.e. move its fiber in sleeping state)
+    rootFiber = fibers.createFromCallback(.{ .callback = workerCallback });
 }
 
-pub fn switchToRootFiber() void {
-    // note: shared.lock must active!
-    threading.SwitchToFiber(rootFiber.?);
+threadlocal var currentFiber: ?*Fiber = null;
+
+pub inline fn getCurrentFiber() *Fiber {
+    return currentFiber orelse @panic(
+        "trying to retrieve current fiber in non-fiber context, " ++
+            "make sure to run `initFiberEngine`",
+    );
 }
 
-fn workerThread(threadParam: ?*anyopaque) callconv(.winapi) u32 {
-    _ = threadParam;
+// WARNING: all `switchXXX` functions must be called with `shared.lock` activated!
+pub fn switchToNext() void {
+    if (shared.queue.popFront()) |fiber| {
+        switchToFiber(fiber);
+    } else {
+        switchToFiber(rootFiber.?);
+    }
+}
 
-    initRootFiber();
+fn switchToFiber(fiber: *Fiber) void {
+    std.debug.assert(currentFiber != fiber);
+    currentFiber = fiber;
+    threading.SwitchToFiber(fiber.handle());
+}
+
+fn workerThread(param: ?*anyopaque) callconv(.winapi) u32 {
+    _ = param;
+
+    initFiberFromThread(true);
 
     shared.lock();
     shared.started += 1;
@@ -81,7 +120,7 @@ fn workerThread(threadParam: ?*anyopaque) callconv(.winapi) u32 {
 
     while (!shared.shutdown) {
         if (shared.queue.popFront()) |fiber| {
-            fiber.switchTo();
+            switchToFiber(fiber);
             continue;
         }
 
@@ -91,16 +130,31 @@ fn workerThread(threadParam: ?*anyopaque) callconv(.winapi) u32 {
     return 0;
 }
 
+fn workerCallback(param: ?*anyopaque) void {
+    _ = param;
+
+    shared.lock();
+    defer shared.unlock();
+
+    while (!shared.shutdown) {
+        if (shared.queue.popFront()) |fiber| {
+            switchToFiber(fiber);
+            continue;
+        }
+
+        shared.wait();
+    }
+}
+
 pub fn storeFinishedFiberAndActivateNext(fiber: *Fiber) void {
+    std.debug.assert(currentFiber == fiber);
+
     // note: called on fiber side
     shared.lock();
     defer shared.unlock();
 
     shared.freeList.append(shared.gpa, fiber) catch @panic("oom");
 
-    // switch back to worker fiber
     // note: we are still under `shared.lock`
-    switchToRootFiber();
+    switchToNext();
 }
-
-// TODO: active directly next pending fiber without switching to the root

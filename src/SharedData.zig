@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const Condition = @import("Condition.zig");
-const Fiber = @import("Fiber.zig");
+const Fiber = @import("fibers.zig").Fiber;
 const ListDequeUnmanaged = @import("list_deque.zig").ListDequeUnmanaged;
+const ThreadCondition = @import("ThreadCondition.zig");
 
 const Self = @This();
 numThreads: u32,
@@ -12,7 +12,7 @@ finished: u32 = 0,
 
 freeList: std.ArrayListUnmanaged(*Fiber),
 queue: ListDequeUnmanaged(*Fiber),
-cond: Condition = .{},
+cond: ThreadCondition = .{},
 
 gpa: std.mem.Allocator,
 
@@ -26,14 +26,7 @@ pub fn init(gpa: std.mem.Allocator, numThreads: u32) Self {
 }
 
 pub fn deinit(self: *Self) void {
-    for (self.freeList.items) |f| {
-        f.destroy(self.gpa);
-    }
     self.freeList.deinit(self.gpa);
-
-    for (self.queue.data.items[self.queue.offset..]) |f| {
-        f.destroy(self.gpa);
-    }
     self.queue.deinit(self.gpa);
     self.* = undefined;
 }
