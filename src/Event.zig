@@ -49,3 +49,9 @@ pub fn wait(self: *Self) void {
 
     std.debug.assert(self.activated);
 }
+
+/// this method is not threadsafe
+pub fn resetUnsafe(self: *Self) void {
+    std.debug.assert(self.pending == null);
+    self.activated = false;
+}

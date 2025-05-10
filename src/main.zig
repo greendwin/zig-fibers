@@ -40,10 +40,10 @@ pub fn main() !void {
     const Worker = struct {
         id: usize,
         input: *lib.Channel(i32),
-        finished: *lib.Event,
+        waitGroup: *lib.WaitGroup,
 
         pub fn run(self: *@This()) void {
-            defer self.finished.set();
+            defer self.waitGroup.done();
 
             while (self.input.read()) |x| {
                 print("{:2}: {} -> {}\n", .{ self.id, x, x * x });
@@ -54,32 +54,30 @@ pub fn main() !void {
         }
     };
 
-    var events: [16]lib.Event = undefined;
-    for (&events, 0..) |*ev, k| {
-        ev.* = .{};
-
+    const numWorkers = 16;
+    var wg: lib.WaitGroup = .{};
+    wg.add(numWorkers);
+    for (0..numWorkers) |k| {
         lib.spawnRunnable(gpa.allocator(), Worker{
             .id = k,
             .input = &seq,
-            .finished = ev,
+            .waitGroup = &wg,
         }, .nodeinit);
     }
 
     const WaitAll = struct {
-        events: []lib.Event,
+        waitGroup: *lib.WaitGroup,
         finished: *lib.Event,
 
         pub fn run(self: *@This()) void {
-            for (self.events) |*ev| {
-                ev.wait();
-            }
+            self.waitGroup.wait();
             self.finished.set();
         }
     };
 
     var finished = lib.Event{};
     lib.spawnRunnable(gpa.allocator(), WaitAll{
-        .events = &events,
+        .waitGroup = &wg,
         .finished = &finished,
     }, .nodeinit);
 
@@ -88,11 +86,11 @@ pub fn main() !void {
 
 // TODO: implement `Channel`
 // [x] non-buffered send/write
-// [ ] channel closing
+// [x] channel closing
 // [ ] buffered channels (do we need them?)
 
 // DONE: fix `ListDeque` (and rename to `VecDeque`)
 
-// TODO: allow to reset `Events`
-// TODO: add wait group
+// DONE: allow to reset `Events`
+// DONE: add wait group
 // TODO: implement `select` for reading from multiple channels

@@ -10,6 +10,7 @@ const Fiber = fibers.Fiber;
 const kernel = @import("kernel.zig");
 pub const spawnRunnable = @import("runnable.zig").spawnRunnable;
 pub const ThreadCondition = @import("ThreadCondition.zig");
+pub const WaitGroup = @import("WaitGroup.zig");
 
 pub fn initFiberEngine(gpa: std.mem.Allocator, numThreads: u32) void {
     kernel.shared = .init(gpa, numThreads);
