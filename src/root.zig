@@ -3,6 +3,7 @@ const testing = std.testing;
 
 const threading = @import("win32").system.threading;
 
+pub const Channel = @import("Channel.zig").Channel;
 pub const Event = @import("Event.zig");
 const fibers = @import("fibers.zig");
 const Fiber = fibers.Fiber;

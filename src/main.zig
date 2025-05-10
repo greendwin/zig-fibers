@@ -18,18 +18,39 @@ pub fn main() !void {
         print("done.\n", .{});
     }
 
+    const Sequence = struct {
+        count: usize,
+        output: *lib.Channel(i32),
+
+        pub fn run(self: *@This()) void {
+            defer self.output.close();
+
+            for (0..self.count) |k| {
+                self.output.write(@intCast(k));
+            }
+        }
+    };
+
+    var seq: lib.Channel(i32) = .{};
+    lib.spawnRunnable(gpa.allocator(), Sequence{
+        .count = 1000,
+        .output = &seq,
+    }, .nodeinit);
+
     const Worker = struct {
         id: usize,
+        input: *lib.Channel(i32),
         finished: *lib.Event,
 
         pub fn run(self: *@This()) void {
             defer self.finished.set();
 
-            for (0..10) |k| {
-                print("{} - {}\n", .{ self.id, k });
-                // TBD: we can implement `timeout` to sleep without cpu usage
-                std.Thread.sleep(100 * std.time.ns_per_ms);
+            while (self.input.read()) |x| {
+                print("{}: {} -> {}\n", .{ self.id, x, x * x });
             }
+
+            // TBD: we can implement `timeout` to sleep without cpu usage
+            std.Thread.sleep(100 * std.time.ns_per_ms);
         }
     };
 
@@ -39,6 +60,7 @@ pub fn main() !void {
 
         lib.spawnRunnable(gpa.allocator(), Worker{
             .id = k,
+            .input = &seq,
             .finished = ev,
         }, .nodeinit);
     }
@@ -65,9 +87,9 @@ pub fn main() !void {
 }
 
 // TODO: implement `Channel`
-// [ ] non-buffered send/write
+// [x] non-buffered send/write
 // [ ] channel closing
-// [ ] buffered channels
+// [ ] buffered channels (do we need them?)
 // TODO: allow to reset `Events`
 // TODO: add wait group
 // TODO: implement `select` for reading from multiple channels
