@@ -84,13 +84,25 @@ pub fn main() !void {
     finished.wait();
 }
 
+// TODO: reorganize repo to library and examples
+// [ ] basic example demonstrating all primitives
+// [ ] complex calculation with threads prioritization (setup thread groups)
+// [ ] TBD: errors processing
+
+// TODO: add tracing lib that writes execution pipeline
+// TODO: vizualize traces
+
+// TODO: add tests
+// TODO: add readme
+
 // TODO: implement `Channel`
 // [x] non-buffered send/write
 // [x] channel closing
-// [ ] buffered channels (do we need them?)
+// [ ] TBD: buffered channels (maybe special oneshot channels? aka `Future`)
 
-// DONE: fix `ListDeque` (and rename to `VecDeque`)
-
-// DONE: allow to reset `Events`
-// DONE: add wait group
 // TODO: implement `select` for reading from multiple channels
+// [ ] select read
+// [ ] mixed select read/write
+// [ ] context-like cancellation
+
+// TODO: timeouts
