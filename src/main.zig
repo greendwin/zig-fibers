@@ -3,34 +3,6 @@ const print = std.debug.print;
 
 const lib = @import("fibers_proto");
 
-fn spawnRunnable(gpa: std.mem.Allocator, runnable: anytype) void {
-    const T = @TypeOf(runnable);
-
-    const Wrapper = struct {
-        const Self = @This();
-
-        data: T,
-        gpa: std.mem.Allocator,
-
-        fn run(self: *Self) void {
-            self.data.run();
-        }
-
-        fn deinit(self: *Self) void {
-            const alloc = self.gpa;
-            alloc.destroy(self);
-        }
-    };
-
-    const wrp = gpa.create(Wrapper) catch @panic("oom");
-    wrp.* = .{
-        .data = runnable,
-        .gpa = gpa,
-    };
-
-    lib.spawnTask(Wrapper, Wrapper.run, wrp, Wrapper.deinit);
-}
-
 pub fn main() !void {
     var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer {
@@ -50,7 +22,7 @@ pub fn main() !void {
         id: usize,
         finished: *lib.Event,
 
-        fn run(self: *@This()) void {
+        pub fn run(self: *@This()) void {
             defer self.finished.set();
 
             for (0..10) |k| {
@@ -65,17 +37,17 @@ pub fn main() !void {
     for (&events, 0..) |*ev, k| {
         ev.* = .{};
 
-        spawnRunnable(gpa.allocator(), Worker{
+        lib.spawnRunnable(gpa.allocator(), Worker{
             .id = k,
             .finished = ev,
-        });
+        }, .nodeinit);
     }
 
     const WaitAll = struct {
         events: []lib.Event,
         finished: *lib.Event,
 
-        fn run(self: *@This()) void {
+        pub fn run(self: *@This()) void {
             for (self.events) |*ev| {
                 ev.wait();
             }
@@ -84,10 +56,18 @@ pub fn main() !void {
     };
 
     var finished = lib.Event{};
-    spawnRunnable(gpa.allocator(), WaitAll{
+    lib.spawnRunnable(gpa.allocator(), WaitAll{
         .events = &events,
         .finished = &finished,
-    });
+    }, .nodeinit);
 
     finished.wait();
 }
+
+// TODO: implement `Channel`
+// [ ] non-buffered send/write
+// [ ] channel closing
+// [ ] buffered channels
+// TODO: allow to reset `Events`
+// TODO: add wait group
+// TODO: implement `select` for reading from multiple channels

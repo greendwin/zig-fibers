@@ -7,6 +7,7 @@ pub const Event = @import("Event.zig");
 const fibers = @import("fibers.zig");
 const Fiber = fibers.Fiber;
 const kernel = @import("kernel.zig");
+pub const spawnRunnable = @import("runnable.zig").spawnRunnable;
 pub const ThreadCondition = @import("ThreadCondition.zig");
 
 pub fn initFiberEngine(gpa: std.mem.Allocator, numThreads: u32) void {
@@ -33,8 +34,7 @@ pub fn spawnTask(T: type, callback: *const fn (*T) void, data: *T, dataDeinit: ?
     defer kernel.shared.unlock();
 
     if (kernel.shared.freeList.pop()) |fiber| {
-        const tp: fibers.FiberType = fiber.*;
-        std.debug.assert(tp == .callback);
+        std.debug.assert(fiber.getType() == .callback);
         fiber.callback.cb = cb;
         kernel.scheduleNoLock(fiber);
         return;

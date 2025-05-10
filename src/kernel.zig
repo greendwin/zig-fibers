@@ -9,7 +9,7 @@ const SharedData = @import("SharedData.zig");
 pub var shared: SharedData = undefined;
 
 pub inline fn scheduleNoLock(fiber: *Fiber) void {
-    if (fiber.threadGroup()) |id| {
+    if (fiber.getThreadGroup()) |id| {
         shared.groups[id].append(shared.gpa, fiber) catch @panic("oom");
     } else {
         shared.queue.append(shared.gpa, fiber) catch @panic("oom");
@@ -111,7 +111,7 @@ pub fn peakNextNoLock() ?*Fiber {
 fn switchToFiberNoLock(fiber: *Fiber) void {
     std.debug.assert(currentFiber != fiber);
     currentFiber = fiber;
-    threading.SwitchToFiber(fiber.handle());
+    threading.SwitchToFiber(fiber.getHandle());
 }
 
 fn workerThread(param: ?*anyopaque) callconv(.winapi) u32 {
@@ -161,9 +161,7 @@ fn workerCallback(param: ?*anyopaque) void {
 
 pub fn storeFinishedFiberAndActivateNext(fiber: *Fiber) void {
     std.debug.assert(currentFiber == fiber);
-
-    const tp: fibers.FiberType = fiber.*;
-    std.debug.assert(tp == .callback);
+    std.debug.assert(fiber.getType() == .callback);
 
     // note: called on fiber side
     shared.lock();

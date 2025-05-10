@@ -34,14 +34,18 @@ pub const Fiber = union(FiberType) {
     callback: FiberCallback,
     thread: FiberThread,
 
-    pub fn threadGroup(self: *Fiber) ?usize {
+    pub inline fn getType(self: Fiber) FiberType {
+        return self;
+    }
+
+    pub inline fn getThreadGroup(self: *Fiber) ?usize {
         switch (self.*) {
             .callback => return null,
             .thread => |x| return x.threadGroup,
         }
     }
 
-    pub fn handle(self: *Fiber) *anyopaque {
+    pub inline fn getHandle(self: *Fiber) *anyopaque {
         switch (self.*) {
             inline else => |x| return x.handle,
         }
