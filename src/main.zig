@@ -46,7 +46,7 @@ pub fn main() !void {
             defer self.finished.set();
 
             while (self.input.read()) |x| {
-                print("{}: {} -> {}\n", .{ self.id, x, x * x });
+                print("{:2}: {} -> {}\n", .{ self.id, x, x * x });
             }
 
             // TBD: we can implement `timeout` to sleep without cpu usage
@@ -90,6 +90,9 @@ pub fn main() !void {
 // [x] non-buffered send/write
 // [ ] channel closing
 // [ ] buffered channels (do we need them?)
+
+// DONE: fix `ListDeque` (and rename to `VecDeque`)
+
 // TODO: allow to reset `Events`
 // TODO: add wait group
 // TODO: implement `select` for reading from multiple channels

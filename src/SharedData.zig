@@ -1,8 +1,8 @@
 const std = @import("std");
 
 const Fiber = @import("fibers.zig").Fiber;
-const ListDequeUnmanaged = @import("list_deque.zig").ListDequeUnmanaged;
 const ThreadCondition = @import("ThreadCondition.zig");
+const VecDequeUnmanaged = @import("vec_deque.zig").VecDequeUnmanaged;
 
 pub const ORIGIN_GROUP_ID = 0;
 
@@ -16,8 +16,8 @@ shutdown: bool = false,
 finished: u32 = 0,
 
 freeList: std.ArrayListUnmanaged(*Fiber),
-queue: ListDequeUnmanaged(*Fiber),
-groups: [MAX_GROUPS]ListDequeUnmanaged(*Fiber),
+queue: VecDequeUnmanaged(*Fiber),
+groups: [MAX_GROUPS]VecDequeUnmanaged(*Fiber),
 cond: ThreadCondition = .{},
 
 gpa: std.mem.Allocator,
@@ -26,13 +26,13 @@ pub fn init(gpa: std.mem.Allocator, numThreads: u32) Self {
     var r = Self{
         .numThreads = numThreads,
         .freeList = std.ArrayListUnmanaged(*Fiber).initCapacity(gpa, 16) catch @panic("oom"),
-        .queue = ListDequeUnmanaged(*Fiber).initCapacity(gpa, 256) catch @panic("oom"),
+        .queue = VecDequeUnmanaged(*Fiber).initCapacity(gpa, 256) catch @panic("oom"),
         .groups = undefined,
         .gpa = gpa,
     };
 
     for (&r.groups) |*gr| {
-        gr.* = ListDequeUnmanaged(*Fiber).initCapacity(gpa, 16) catch @panic("oom");
+        gr.* = VecDequeUnmanaged(*Fiber).initCapacity(gpa, 16) catch @panic("oom");
     }
 
     return r;

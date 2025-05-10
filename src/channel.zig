@@ -1,5 +1,4 @@
 const std = @import("std");
-const print = std.debug.print;
 
 const Fiber = @import("fibers.zig").Fiber;
 const kernel = @import("kernel.zig");
@@ -21,16 +20,12 @@ pub fn Channel(T: type) type {
             }
 
             if (self.pendingRead.popFront()) |reader| {
-                print("{x}: WRITE_DIRECT {}\n", .{ @intFromPtr(kernel.getCurrentFiber()) & 0xffff, data });
-
                 const dst: *T = @ptrCast(@alignCast(reader.data_ptr));
                 dst.* = data;
                 reader.ok = true;
                 kernel.scheduleNoLock(reader.fiber);
                 return;
             }
-
-            print("{x}: WRITE_PENDING {}\n", .{ @intFromPtr(kernel.getCurrentFiber()) & 0xffff, data });
 
             var node: FiberQueue.Node = .{
                 .fiber = kernel.getCurrentFiber(),
@@ -66,15 +61,12 @@ pub fn Channel(T: type) type {
                     }
                 }
 
-                print("{x}: READ_DIRECT {}\n", .{ @intFromPtr(kernel.getCurrentFiber()) & 0xffff, data });
-
                 return data;
             }
 
             if (self.closed) {
                 // there is no pending writer and channel is closed
                 // return immediately
-                print("{x}: READ_CLOSED\n", .{@intFromPtr(kernel.getCurrentFiber()) & 0xffff});
                 return null;
             }
 
@@ -84,8 +76,6 @@ pub fn Channel(T: type) type {
             };
             self.pendingRead.append(&node);
 
-            print("{x}: READ_PENDING...\n", .{@intFromPtr(kernel.getCurrentFiber()) & 0xffff});
-
             // wait until writer awakes us
             kernel.switchToNextNoLock();
 
@@ -94,8 +84,6 @@ pub fn Channel(T: type) type {
                 std.debug.assert(self.pendingWrite.isEmpty());
                 return null;
             }
-
-            print("{x}: READ_AWAKE {}\n", .{ @intFromPtr(kernel.getCurrentFiber()) & 0xffff, data });
 
             return data;
         }
