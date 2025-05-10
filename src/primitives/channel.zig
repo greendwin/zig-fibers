@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const Fiber = @import("fibers.zig").Fiber;
-const kernel = @import("kernel.zig");
+const Fiber = @import("../fibers.zig").Fiber;
+const kernel = @import("../kernel.zig");
 
 pub fn Channel(T: type) type {
     return struct {

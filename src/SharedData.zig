@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const Fiber = @import("fibers.zig").Fiber;
-const ThreadCondition = @import("ThreadCondition.zig");
 const VecDequeUnmanaged = @import("vec_deque.zig").VecDequeUnmanaged;
 
 pub const ORIGIN_GROUP_ID = 0;
@@ -18,7 +17,8 @@ finished: u32 = 0,
 freeList: std.ArrayListUnmanaged(*Fiber),
 queue: VecDequeUnmanaged(*Fiber),
 groups: [MAX_GROUPS]VecDequeUnmanaged(*Fiber),
-cond: ThreadCondition = .{},
+mutex: std.Thread.Mutex = .{},
+cond: std.Thread.Condition = .{},
 
 gpa: std.mem.Allocator,
 
@@ -50,13 +50,13 @@ pub fn deinit(self: *Self) void {
 }
 
 pub inline fn lock(self: *Self) void {
-    self.cond.lock();
+    self.mutex.lock();
 }
 
 pub inline fn unlock(self: *Self) void {
-    self.cond.unlock();
+    self.mutex.unlock();
 }
 
 pub inline fn wait(self: *Self) void {
-    self.cond.wait();
+    self.cond.wait(&self.mutex);
 }
